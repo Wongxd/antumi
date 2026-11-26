@@ -28,6 +28,15 @@ export class ProjectRegistry {
       .map((row) => z.object({ path: z.string() }).parse(row).path)
   }
 
+  // The same list without the cap: what a phone's pickers offer and what core checks a phone's
+  // paths against.
+  all(): string[] {
+    return this.db
+      .prepare('SELECT path FROM known_repos ORDER BY used_at DESC')
+      .all()
+      .map((row) => z.object({ path: z.string() }).parse(row).path)
+  }
+
   remember(paths: readonly string[]): void {
     if (paths.length === 0) return
     const upsert = this.db.prepare(

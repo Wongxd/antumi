@@ -31,6 +31,14 @@ describe('ProjectRegistry', () => {
     expect(projects.recent()).toEqual([path.normalize('/a'), path.normalize('/b')])
   })
 
+  it('lists every known project, where the recent list stops at its cap', () => {
+    for (let index = 0; index < 60; index++) projects.remember([`/code/p${index}`])
+    expect(projects.all()).toHaveLength(60)
+    expect(projects.recent()).toHaveLength(50)
+    expect(projects.all().slice(0, 50)).toEqual(projects.recent())
+    expect(projects.all()[0]).toEqual(path.normalize('/code/p59'))
+  })
+
   it('stores and forgets paths in their normal form', () => {
     projects.remember(['/code/tmp/../app'])
     projects.remember(['/code/./lib'])

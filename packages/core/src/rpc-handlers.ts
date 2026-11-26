@@ -151,10 +151,10 @@ export function createRpcHandlers(
     if (conversations.get(id).channel) throw new Rejection('channel-managed', 'this conversation answers a chat platform; change it from its agent')
   }
   // A phone reaches only projects the user already worked in from the computer.
-  const requireRecentForPhone = (connection: Connection, paths: readonly string[]): void => {
+  const requireKnownForPhone = (connection: Connection, paths: readonly string[]): void => {
     if (!connection.mobile) return
-    const recent = new Set(projects.recent())
-    if (!paths.every((each) => recent.has(each))) throw new Rejection('mobile-project-not-recent', 'pick a recent project')
+    const known = new Set(projects.all())
+    if (!paths.every((each) => known.has(each))) throw new Rejection('mobile-project-not-recent', 'pick a project the computer has used')
   }
   const teamCalls = () => { if (!squadCalls) throw new Rejection('squad-calls-unavailable'); return squadCalls }
   const profileService = () => {
@@ -536,7 +536,7 @@ export function createRpcHandlers(
     'tasks.create': (params, connection) => {
       // A squad is set up on the computer, with the agent profiles it runs.
       if (connection.mobile && params.squadId) throw new Rejection('mobile-not-allowed', 'squads are set up on the computer')
-      requireRecentForPhone(connection, params.repos ?? [])
+      requireKnownForPhone(connection, params.repos ?? [])
       return service.createTask(params)
     },
     'tasks.update': (params) => userTask(params.id, () => service.update(params)),
@@ -574,7 +574,7 @@ export function createRpcHandlers(
     'conversations.helper': ({ id }) => conversations.helper(id),
     'conversations.create': ({ agent, projectPaths, worktree, branch, allowBypass, permissionMode, model, effort, deferStart, helperOf, modelProvider, profileId, account }, connection) => {
       if (connection.mobile && (helperOf || profileId)) throw new Rejection('mobile-project-not-recent', 'pick a recent project')
-      requireRecentForPhone(connection, projectPaths)
+      requireKnownForPhone(connection, projectPaths)
       const profile = profileId ? profileService().get(profileId) : undefined
       if (profile && (profile.agent !== agent || helperOf)) throw new Rejection('invalid-params', '智能体配置与会话不匹配')
       return conversations.create(agent, projectPaths, allowBypass, { permissionMode: profile?.capability === 'readOnly' ? agentDescriptor(agent).readOnlyMode : permissionMode,
@@ -647,7 +647,7 @@ export function createRpcHandlers(
     'conversations.branches': ({ id }) => conversations.branches(id),
     'conversations.branchOptions': ({ id }) => conversations.branchOptions(id),
     'projects.branches': ({ path }, connection) => {
-      requireRecentForPhone(connection, [path])
+      requireKnownForPhone(connection, [path])
       return conversations.projectBranchOptions(path)
     },
     'conversations.switchBranch': async ({ id, project, ref }) => { await git.execute({ kind: 'conversation', id, project }, { kind: 'switch', ref }); return conversations.get(id) },
@@ -825,6 +825,7 @@ export function createRpcHandlers(
       return OK
     },
     'projects.recent': () => projects.recent(),
+    'projects.all': () => projects.all(),
     'projects.describe': ({ paths }) => describeProjects(paths),
     'worktrees.list': () => worktrees.list(),
     'worktrees.clean': ({ paths }) => worktrees.clean(paths),

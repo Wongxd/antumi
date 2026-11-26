@@ -11,6 +11,7 @@ describe('the phone allowlist', () => {
 
   it('lets a viewing phone read and nothing more, and keeps settings and terminals off every phone', () => {
     expect(mobileMayCall('conversations.list', 'view')).toBe(true)
+    expect(mobileMayCall('projects.all', 'view')).toBe(true)
     expect(mobileMayCall('conversations.send', 'view')).toBe(false)
     expect(mobileMayCall('conversations.send', 'operate')).toBe(true)
     expect(mobileMayCall('tasks.create', 'view')).toBe(false)

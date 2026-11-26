@@ -413,7 +413,10 @@ export async function setOption(id: string, option: ChatOption, value: string): 
   await call('conversations.setOption', { id, option, value })
 }
 
-export async function recentProjects(): Promise<string[]> {
+// Every project the computer's Antumi has used, most recent first; an older core offers only
+// its recent list, and the picker then just shows fewer.
+export async function allProjects(): Promise<string[]> {
+  if (useSession.getState().welcome?.features.includes('all-projects')) return (await call('projects.all', {})) ?? []
   return (await call('projects.recent', {})) ?? []
 }
 
@@ -421,7 +424,7 @@ function keepTask(task: Task): void {
   useSession.setState((state) => ({ tasks: { ...state.tasks, [task.id]: task } }))
 }
 
-// A task in recent projects, the first its primary, for the computer's agent to plan or carry out once started.
+// A task in projects the computer has used, the first its primary, for the computer's agent to plan or carry out once started.
 export async function createTask(options: { title: string; details: string; repos: readonly string[]; agent: AgentKind }): Promise<Task | null> {
   const task = await call('tasks.create', { title: options.title, ...(options.details ? { details: options.details } : {}), repos: [...options.repos], agent: options.agent })
   if (task) keepTask(task)

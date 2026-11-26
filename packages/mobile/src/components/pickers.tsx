@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Brain, Cpu, ShieldCheck } from 'lucide-react-native'
 import { defaultStartMode, startModes, type AgentKind, type ChatCatalog, type ChatPermissionMode } from '@antumi/protocol'
 import { AgentMark } from './agent-mark'
@@ -7,17 +7,17 @@ import { ChoiceList, Sheet } from './sheet'
 import { Button, ListGroup, ListRow, Muted, SectionLabel, tap } from './ui'
 import { t } from '../i18n'
 import { agentName, effortName, folderName, modeName } from '../labels'
-import { agentCatalog, readyAgents, recentProjects } from '../session'
+import { agentCatalog, allProjects, readyAgents } from '../session'
 import { radius, space, type, useTheme } from '../theme'
 
-// What a new conversation or task is made with: an agent the computer has ready, in one of its
-// recent projects (core takes no other path from a phone). Each starts on the first offered.
+// What a new conversation or task is made with: an agent the computer has ready, in one of the
+// projects it has used (core takes no other path from a phone). Each starts on the first offered.
 export function useStartChoices() {
   const [projects, setProjects] = useState<string[] | null>(null)
   const [project, setProject] = useState<string | null>(null)
   const choices = useReadyAgents()
   useEffect(() => {
-    void recentProjects().then((list) => {
+    void allProjects().then((list) => {
       setProjects(list)
       setProject((current) => current ?? list[0] ?? null)
     })
@@ -68,21 +68,41 @@ export function AgentPicker({ title, agents, agent, onPick, failed = false, onRe
   )
 }
 
-// Recent projects in a sheet, several for one conversation or task: the first picked is the
-// primary, where the agent works; picking it away hands that to the next. The last one stays.
+// The projects the computer has used in a sheet, several for one conversation or task: the first
+// picked is the primary, where the agent works; picking it away hands that to the next. The last
+// one stays. A long list narrows through the search field; picked paths stay listed so they can
+// be unpicked, and the folder name or any part of the path matches.
 export function ProjectsSheet({ projects, picked, onChange, onClose }: { projects: readonly string[]; picked: readonly string[]; onChange: (picked: string[]) => void; onClose: () => void }) {
+  const theme = useTheme()
+  const [query, setQuery] = useState('')
   const toggle = (path: string) => {
     if (!picked.includes(path)) return onChange([...picked, path])
     if (picked.length > 1) onChange(picked.filter((each) => each !== path))
   }
+  const needle = query.trim().toLowerCase()
+  const matches = new Set(needle ? projects.filter((path) => path.toLowerCase().includes(needle)) : projects)
+  const shown = needle ? projects.filter((path) => picked.includes(path) || matches.has(path)) : projects
   return (
     <Sheet title={t('projects')} onClose={onClose}>
       <Muted>{t('projectsHint')}</Muted>
+      {projects.length > 10 ? (
+        <TextInput
+          style={[type.secondary, styles.search, { backgroundColor: theme.raised, borderColor: theme.border, color: theme.text }]}
+          placeholder={t('searchProjects')}
+          placeholderTextColor={theme.text3}
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      ) : null}
       <ChoiceList
-        choices={projects.map((path) => ({ value: path, label: path === picked[0] ? `${folderName(path)} · ${t('primaryProject')}` : folderName(path), detail: path }))}
+        choices={shown.map((path) => ({ value: path, label: path === picked[0] ? `${folderName(path)} · ${t('primaryProject')}` : folderName(path), detail: path }))}
         current={picked}
         onPick={toggle}
       />
+      {needle && matches.size === 0 ? <Muted>{t('noProjectMatches')}</Muted> : null}
     </Sheet>
   )
 }
@@ -179,6 +199,7 @@ function pickMode(modes: readonly ChatPermissionMode[], value: string, pick: (mo
 const styles = StyleSheet.create({
   section: { gap: space.sm },
   value: { maxWidth: 170 },
+  search: { borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: space.md, paddingVertical: space.sm },
   // Bleeds to the screen edges so a chip cut off at the right reads as scrollable.
   agentScroll: { marginHorizontal: -space.lg },
   agents: { gap: space.sm, paddingHorizontal: space.lg },

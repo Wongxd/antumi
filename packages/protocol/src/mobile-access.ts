@@ -20,6 +20,8 @@ export const MOBILE_METHODS: Partial<Record<RpcMethod, MobileAccess>> = {
   'tasks.list': 'view',
   'usage.list': 'view',
   'projects.recent': 'view',
+  // The full list behind the pickers, on a core that declares all-projects.
+  'projects.all': 'view',
   'system.environment': 'view',
   'conversations.respond': 'operate',
   'conversations.send': 'operate',
@@ -31,11 +33,11 @@ export const MOBILE_METHODS: Partial<Record<RpcMethod, MobileAccess>> = {
   'conversations.setOption': 'operate',
   // A free conversation only, as on the computer (core refuses a task's chat).
   'conversations.handoff': 'operate',
-  // Only in projects already among the recent ones (core checks the paths), as is the next.
+  // Only in projects the computer has already used (core checks the paths), as is the next.
   'conversations.create': 'operate',
   // Whether a project is a git repo, for offering a worktree.
   'projects.branches': 'operate',
-  // Also only in recent projects, and without a squad (core checks).
+  // Also only in projects the computer has used, and without a squad (core checks).
   'tasks.create': 'operate',
   // In the mode the task keeps, as a start from its details on the computer.
   'tasks.start': 'operate',
