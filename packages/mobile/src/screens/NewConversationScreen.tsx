@@ -30,7 +30,8 @@ export function NewConversationScreen() {
   const [picking, setPicking] = useState(false)
   const usage = useSession((s) => s.usage)
   const now = useNow()
-  const exhausted = agent ? exhaustedText(usage?.find((each) => each.agent === agent), modelText(options?.model), now) : null
+  // A provider runs it outside the agent's subscription, so its limits say nothing here.
+  const exhausted = agent && !options?.provider ? exhaustedText(usage?.find((each) => each.agent === agent), modelText(options?.model), now) : null
   const unasked = picked.find((path) => !(path in git))
   useEffect(() => {
     if (!unasked) return

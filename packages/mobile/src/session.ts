@@ -22,6 +22,7 @@ import {
   type ChatPermissionMode,
   type MobileAccess,
   type MobileHello,
+  type ModelProvider,
   type RpcMethod,
   type RpcParams,
   type RpcResult,
@@ -56,6 +57,9 @@ type State = {
   chats: Record<string, ChatView>
   // Each agent's usage limits on this computer; null until it says, or when it cannot.
   usage: AgentUsage[] | null
+  // The computer's model providers, which an agent may be started on instead of its own account;
+  // null until read, or on a core that keeps none.
+  providers: ModelProvider[] | null
   // What the user wrote in a chat and has not sent, by conversation, while the app runs.
   drafts: Record<string, Draft>
   // The conversation groups the user opened, by group key, while the app runs; the rest stay folded.
@@ -76,6 +80,7 @@ export const useSession = create<State>()(() => ({
   tasks: {},
   chats: {},
   usage: null,
+  providers: null,
   drafts: {},
   expandedGroups: {},
   notice: null
@@ -214,7 +219,7 @@ export async function connect(computerKey: string): Promise<void> {
   if (!computer || !key) return
   const switching = useSession.getState().current !== computerKey
   disconnect()
-  useSession.setState({ current: computerKey, status: 'connecting', ...(switching ? { welcome: null, conversations: {}, tasks: {}, chats: {}, usage: null, drafts: {} } : {}) })
+  useSession.setState({ current: computerKey, status: 'connecting', ...(switching ? { welcome: null, conversations: {}, tasks: {}, chats: {}, usage: null, providers: null, drafts: {} } : {}) })
   if (switching) {
     watched.clear()
     await showCached(computerKey)
@@ -239,7 +244,7 @@ export async function connect(computerKey: string): Promise<void> {
 
 function revoked(computerKey: string): void {
   dropCache(computerKey)
-  useSession.setState({ status: 'revoked', conversations: {}, tasks: {}, chats: {}, usage: null, drafts: {} })
+  useSession.setState({ status: 'revoked', conversations: {}, tasks: {}, chats: {}, usage: null, providers: null, drafts: {} })
 }
 
 async function connected(link: MobileConnection, computer: Computer): Promise<void> {
@@ -282,6 +287,7 @@ async function connected(link: MobileConnection, computer: Computer): Promise<vo
   link.on('usage.changed', ({ usage }) => useSession.setState((state) => ({
     usage: [...(state.usage ?? []).filter((each) => each.agent !== usage.agent || each.account !== usage.account), usage]
   })))
+  link.on('modelProviders.changed', ({ providers }) => useSession.setState({ providers }))
   link.on('tasks.changed', ({ task }) => useSession.setState((state) => ({ tasks: { ...state.tasks, [task.id]: task } })))
   link.on('tasks.deleted', ({ id }) => useSession.setState((state) => {
     const { [id]: _gone, ...tasks } = state.tasks
@@ -317,6 +323,7 @@ export async function refresh(): Promise<void> {
     if (connection === link) say(failure(error))
   }
   await loadUsage(link)
+  await loadProviders(link)
 }
 
 // Apart from the rest: a computer that does not let phones read it still works without.
@@ -324,6 +331,16 @@ async function loadUsage(link: MobileConnection): Promise<void> {
   try {
     const usage = await link.call('usage.list', { windowKinds: [...USAGE_WINDOW_KINDS] })
     if (connection === link) useSession.setState({ usage })
+  } catch {}
+}
+
+// The providers an agent may start on; a computer that keeps none, or an older one, offers only
+// the agents' own accounts.
+async function loadProviders(link: MobileConnection): Promise<void> {
+  if (!link.welcome.features.includes('model-providers')) return
+  try {
+    const providers = await link.call('modelProviders.list', {})
+    if (connection === link) useSession.setState({ providers })
   } catch {}
 }
 
@@ -449,9 +466,10 @@ export async function createTask(options: { title: string; details: string; repo
   return task
 }
 
-// allowBypass as from the computer: a task kept in that mode was set so there.
-export async function startTask(task: Task, mode: ChatPermissionMode): Promise<Task | null> {
-  const started = await call('tasks.start', { id: task.id, allowBypass: true, permissionMode: mode })
+// allowBypass as from the computer: a task kept in that mode was set so there. A provider is fixed
+// for the task's conversation once it starts, so it is chosen here and kept.
+export async function startTask(task: Task, mode: ChatPermissionMode, modelProvider?: string | null): Promise<Task | null> {
+  const started = await call('tasks.start', { id: task.id, allowBypass: true, permissionMode: mode, ...(modelProvider ? { modelProvider } : {}) })
   if (started) keepTask(started)
   return started
 }
@@ -488,13 +506,11 @@ export async function readyAgents(): Promise<AgentKind[] | null> {
 
 // The way the desktop opens one: made without starting, started, then the first message.
 // The models an agent offers a new chat; null when the computer cannot say, and the start then
-// takes the agent's own.
-// With a provider, the models it serves the agent; one that does not serve it leaves the agent on
-// its own account, as core routes a handoff.
+// takes the agent's own. With a provider, the models it serves the agent, and nothing else: a
+// provider whose models it cannot list leaves the agent on the provider's default model.
 export async function agentCatalog(agent: AgentKind, modelProvider?: string | null): Promise<ChatCatalog | null> {
   try {
-    const served = modelProvider ? await connection?.call('conversations.chatCatalog', { agent, modelProvider }) : null
-    return served ?? (await connection?.call('conversations.chatCatalog', { agent })) ?? null
+    return (await connection?.call('conversations.chatCatalog', { agent, ...(modelProvider ? { modelProvider } : {}) })) ?? null
   } catch {
     return null
   }
@@ -520,14 +536,16 @@ export async function handOff(id: string, options: {
 }
 
 // A model or effort left out is the agent's own default. allowBypass as from the computer, which
-// still refuses bypass where its settings have it off.
+// still refuses bypass where its settings have it off. A provider starts it there instead of on its
+// own account; core refuses one that does not serve the agent.
 export async function startConversation(options: {
   agent: Conversation['agent']; projectPaths: readonly string[]; worktree: boolean; text: string; images: readonly string[]
-  permissionMode: ChatPermissionMode; model?: string; effort?: string
+  permissionMode: ChatPermissionMode; model?: string; effort?: string; modelProvider?: string | null
 }): Promise<string | null> {
   const created = await call('conversations.create', {
     agent: options.agent, projectPaths: [...options.projectPaths], deferStart: true, allowBypass: true, permissionMode: options.permissionMode,
-    ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}), ...(options.worktree ? { worktree: true } : {})
+    ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}), ...(options.worktree ? { worktree: true } : {}),
+    ...(options.modelProvider ? { modelProvider: options.modelProvider } : {})
   })
   if (!created) return null
   useSession.setState((state) => ({ conversations: { ...state.conversations, [created.id]: created } }))

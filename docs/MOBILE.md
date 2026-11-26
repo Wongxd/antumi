@@ -23,9 +23,9 @@
 |---|---|
 | 会话列表（等你、在跑、最近；最近可按项目分组）、读聊天记录、加载更早的消息 | 终端、文件编辑、Git |
 | 回答请求（全部选项）、回答问答卡 | 内置浏览器 |
-| 发文字和图片、打断本轮、继续已停的会话；把聊天里的图片存到相册 | 设置、账号、服务商、MCP、插件、来源凭据 |
-| 改权限模式、模型和推理强度 | 删除会话、添加任意项目路径 |
-| 在电脑用过的项目里新建会话（可选 worktree、权限模式、模型和推理强度） | 结束 Agent 进程、停后台工具 |
+| 发文字和图片、打断本轮、继续已停的会话；把聊天里的图片存到相册 | 设置、账号、服务商凭据、MCP、插件、来源凭据 |
+| 改权限模式、模型、模型提供商和推理强度 | 删除会话、添加任意项目路径 |
+| 在电脑用过的项目里新建会话（可选 worktree、权限模式、模型、模型提供商和推理强度） | 结束 Agent 进程、停后台工具 |
 | 任务看板：在电脑用过的项目里新建任务、开始、接受或标记完成、取消 | 不经局域网、Tailscale 或中转服务器的远程连接；内置地址、对所有人开放的公共中转 |
 | ntfy 推送、打开时验证指纹或面容、检查更新 | |
 
@@ -171,12 +171,12 @@ Noise 的一条传输消息最多 65535 字节，而一个附件块是 512 KiB�
 | 用途 | 方法 / 通知 | 可操作 | 只读 |
 |---|---|---|---|
 | 读会话 | `conversations.list` `get` `watchChat` `unwatchChat` `chatItems` `messages` `search` `chatCatalog` `configuration` | ✓ | ✓ |
-| 读其他 | `attachments.stat` `read`、`tasks.list`、`usage.list`、`projects.recent` `all`、`system.environment` | ✓ | ✓ |
+| 读其他 | `attachments.stat` `read`、`tasks.list`、`usage.list`、`projects.recent` `all`、`modelProviders.list`、`system.environment` | ✓ | ✓ |
 | 回答请求 | `conversations.respond`（全部参数，和电脑上一样） | ✓ | |
 | 发消息 | `conversations.send` `cancelQueued` `sendQueued` `retryTurn`、`attachments.begin` `append` `commit` | ✓ | |
 | 会话控制 | `conversations.interrupt`（结束本轮）、`continue`、`setOption`、`handoff`（只限独立会话）、`create`（只能用电脑用过的项目）、`projects.branches`（同样只限这些项目） | ✓ | |
 | 任务 | `tasks.create`（只能用电脑用过的项目）、`start`、`move`（只到完成）、`cancel` | ✓ | |
-| 通知 | `conversations.changed` `deleted` `chatItems` `chatDelta`、`tasks.changed` `deleted`、`usage.changed` | ✓ | ✓ |
+| 通知 | `conversations.changed` `deleted` `chatItems` `chatDelta`、`tasks.changed` `deleted`、`usage.changed`、`modelProviders.changed` | ✓ | ✓ |
 
 说明：
 
@@ -184,6 +184,7 @@ Noise 的一条传输消息最多 65535 字节，而一个附件块是 512 KiB�
 - 手机新建会话时，core 检查每个项目路径都在 `known_repos` 里（电脑用过的全部项目），并且不能带 `helperOf` 和 `profileId`，否则以 `mobile-project-not-recent` 拒绝。手机取项目列表时，core 声明 `all-projects` 就用 `projects.all`（全量），老 core 退回 `projects.recent`（最近 50 个）。`projects.branches` 也只答这些项目，手机用它判断项目是不是 Git 仓库，不是就不提供 worktree（和桌面端一样）；电脑答不了时照旧提供。
 - 新建会话、任务和移交的 Agent 列表共用加载与重试逻辑。环境清单里的未知 Agent 检查和安装建议会被跳过，已认识的 Agent 仍严格校验；加载失败不等同于没有可用 Agent，协议校验失败显示简短的兼容提示。
 - 新建会话页的模型和推理强度来自 `conversations.chatCatalog`，能选的权限模式和默认模式用 protocol 的 `startModes`、`defaultStartMode`，和电脑上的新会话一样；没选的模型和推理强度不传，由 Agent 用自己的默认。项目放在弹出的列表里选，列出电脑用过的全部项目，多时有搜索框（按文件夹名或路径的任意一段过滤），再多也不会把发送按钮挤到下面；可以选多个，先选的是主项目（Agent 的工作目录），其他作为附加目录。开 worktree 时 core 给每个项目各建一个，所以选中的都是 Git 仓库才提供。新建任务同样可以选多个仓库，第一个是主仓库。
+- 模型提供商：手机上可以选，能不能选由电脑上的提供商决定。连接后按 `welcome.features` 里的 `model-providers` 拉一次 `modelProviders.list`，之后跟 `modelProviders.changed` 更新；能列出的和电脑上一样，用 protocol 的 `servingProviders`（有 Key、且端点能服务这个 Agent）过滤。选了提供商，`conversations.create` / `tasks.start` 带上 `modelProvider`，模型和推理强度改从该提供商的 `conversations.chatCatalog` 取（缓存键用 `catalogKey`，提供商改过就重新取），不选就是 Agent 自己的账号。订阅额度在提供商上不适用，所以选了提供商时不显示额度用完的提示。提供商本身（地址、Key、模型）仍然只能在电脑的 设置 → 模型提供商 里改；`modelProviders.save` `remove` `probe` `fetchModels` 不在手机白名单里。会话的提供商在创建时定下，聊天页只显示它跑在哪个提供商上，不能换。老 core 没有 `model-providers` 能力时，列表里只有 Agent 自己的账号。
 - 「停下」按钮对应 `interrupt`，只结束本轮。
 - 手机新建任务同样只能用电脑用过的项目，也不能带 `squadId`（小队连同它用的 Agent 配置都在电脑上设）。开始任务和电脑上从任务详情点开始一样：用任务保存的权限模式，没有就是规划，依赖的任务还没验收时也是规划（`mobile/src/task-start.ts`）；按钮文字也一样（开始规划、开始分析、直接执行）。开始后直接打开任务的会话，规划结果作为确认请求出现在那里。手动改状态只有到完成这一种（`manualMoves`），取消对应 `tasks.cancel`，重新打开、重做、删除留在电脑上。
 - 手机不调 `system.hello`：网关替它做，握手后把服务端版本、能力列表、电脑的主目录和当前地址放进欢迎消息。

@@ -1,4 +1,4 @@
-import { agentDescriptor, type AgentKind, type Conversation, type Task } from '@antumi/protocol'
+import { agentDescriptor, type AgentKind, type Conversation, type ModelProvider, type Task } from '@antumi/protocol'
 import { locale, strings } from './i18n'
 
 export function agentName(agent: AgentKind): string {
@@ -43,4 +43,11 @@ export function taskWhere(task: Task): string {
 export function where(conversation: Conversation): string {
   const project = conversation.projectPaths[0]
   return [agentName(conversation.agent), project ? folderName(project) : null].filter(Boolean).join(' · ')
+}
+
+// The model provider a conversation runs on, by the name the computer gave it; a session still
+// running keeps the one it started with, which the list may no longer have.
+export function providerName(providers: readonly ModelProvider[] | null, id: string | null | undefined, startedOnName?: string | null): string | null {
+  if (!id) return null
+  return providers?.find((each) => each.id === id)?.name ?? startedOnName ?? id
 }

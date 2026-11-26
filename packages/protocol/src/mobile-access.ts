@@ -22,6 +22,9 @@ export const MOBILE_METHODS: Partial<Record<RpcMethod, MobileAccess>> = {
   'projects.recent': 'view',
   // The full list behind the pickers, on a core that declares all-projects.
   'projects.all': 'view',
+  // What an agent can start on besides its own account, never the keys: a phone picks from these
+  // as the computer does, and sets one up on the computer.
+  'modelProviders.list': 'view',
   'system.environment': 'view',
   'conversations.respond': 'operate',
   'conversations.send': 'operate',
@@ -56,7 +59,8 @@ export const MOBILE_NOTIFICATIONS: ReadonlySet<RpcNotificationName> = new Set<Rp
   'conversations.chatDelta',
   'tasks.changed',
   'tasks.deleted',
-  'usage.changed'
+  'usage.changed',
+  'modelProviders.changed'
 ])
 
 // Whether a device with this access may call the method.

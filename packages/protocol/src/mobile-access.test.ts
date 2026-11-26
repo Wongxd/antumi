@@ -18,6 +18,11 @@ describe('the phone allowlist', () => {
     expect(mobileMayCall('tasks.create', 'operate')).toBe(true)
     expect(mobileMayCall('conversations.handoff', 'view')).toBe(false)
     expect(mobileMayCall('conversations.handoff', 'operate')).toBe(true)
+    // A phone picks a provider from the list, and never touches one: its key, its endpoint or its probe.
+    expect(mobileMayCall('modelProviders.list', 'view')).toBe(true)
+    for (const method of ['modelProviders.save', 'modelProviders.remove', 'modelProviders.probe', 'modelProviders.fetchModels'] as const) {
+      expect(mobileMayCall(method, 'operate'), method).toBe(false)
+    }
     for (const method of ['terminals.open', 'files.read', 'git.execute', 'mobile.revoke', 'accounts.list', 'conversations.delete', 'tasks.delete', 'modelProviders.previewCcSwitch', 'modelProviders.importCcSwitch'] as const) {
       expect(mobileMayCall(method, 'operate'), method).toBe(false)
     }

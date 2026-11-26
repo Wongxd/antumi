@@ -13,7 +13,7 @@ import {
 import { ChoiceList, Sheet } from '../components/sheet'
 import { EmptyState, IconButton, Muted, Screen, confirmTap, tap } from '../components/ui'
 import { t } from '../i18n'
-import { agentName, effortName, modeName, where } from '../labels'
+import { agentName, effortName, modeName, providerName, where } from '../labels'
 import { pop, push, useNavigation } from '../navigation'
 import { canHandOff, canOperate, continueChat, EMPTY_DRAFT, interrupt, loadOlder, send, setDraft, setOption, unwatch, uploadImage, useSession, viewsOnly, watch } from '../session'
 import { radius, space, type, useTheme } from '../theme'
@@ -114,8 +114,12 @@ function OptionsSheet({ conversation, state, handoff, onClose }: { conversation:
   const { id, agent } = conversation
   const model = state?.models.find((each) => each.id === state.model)
   const pick = (option: ChatOption) => (value: string) => void setOption(id, option, value)
+  // Fixed when the conversation was made, so it is said, not offered.
+  const providers = useSession((s) => s.providers)
+  const servedBy = providerName(providers, conversation.modelProvider, conversation.route?.name)
   return (
     <Sheet title={t('options')} onClose={onClose}>
+      {servedBy ? <Muted>{t('runsOnProvider', { name: servedBy })}</Muted> : null}
       {handoff ? (
         <ChoiceList title={t('agent')} choices={[{ value: agent, label: agentName(agent), detail: t('handOffAction') }]} current={null}
           onPick={() => { onClose(); push({ name: 'handoff', id }) }} />

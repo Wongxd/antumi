@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MODEL_PROVIDER_PRESETS } from './model-provider-presets'
-import { AnthropicEndpoint, MODEL_PROVIDER_PRESET_IDS, ModelProvider, OpenAiEndpoint, ProviderModel, providerEndpoint, providerRouteKey, providerUrlProblem, providerWireFor } from './model-provider'
+import { AnthropicEndpoint, MODEL_PROVIDER_PRESET_IDS, ModelProvider, OpenAiEndpoint, ProviderModel, catalogKey, providerEndpoint, providerFor, providerRouteKey, providerUrlProblem, providerWireFor, servingProviders } from './model-provider'
 
 const provider = (changes: Partial<ModelProvider> = {}): ModelProvider => ({
   id: 'p1', name: 'P', preset: 'custom',
@@ -73,5 +73,36 @@ describe('providerEndpoint', () => {
     const endpoint = providerEndpoint(provider(), 'claude')
     if (!endpoint) throw new Error('expected an endpoint')
     expect(providerRouteKey('p1', endpoint)).toBe('p1|anthropic|https://a.example.com/anthropic')
+  })
+})
+
+describe('the providers an agent may start on', () => {
+  it('offers only ones with a key that serve this agent', () => {
+    const all = [
+      provider(),
+      provider({ id: 'p2', hasKey: false }),
+      provider({ id: 'p3', agents: ['codex'], openai: { chatUrl: null, responsesUrl: 'https://a.example.com/responses' } }),
+      provider({ id: 'p4', anthropic: null, openai: null })
+    ]
+    expect(servingProviders(all, 'claude').map((each) => each.id)).toEqual(['p1'])
+    // Codex talks over Responses only, which the first one does not serve.
+    expect(servingProviders(all, 'codex').map((each) => each.id)).toEqual(['p3'])
+  })
+
+  it('takes a pick only where it serves the agent, and nothing otherwise', () => {
+    const all = [provider(), provider({ id: 'p2', hasKey: false })]
+    expect(providerFor(all, 'p1', 'claude')?.id).toBe('p1')
+    expect(providerFor(all, 'p2', 'claude')).toBeNull()
+    expect(providerFor(all, 'nobody', 'claude')).toBeNull()
+    expect(providerFor(all, 'p1', null)).toBeNull()
+    expect(providerFor(all, null, 'claude')).toBeNull()
+  })
+
+  it('keeps a catalog under the agent, and under the provider once one is picked', () => {
+    const picked = provider()
+    expect(catalogKey('claude', null)).toBe('claude')
+    expect(catalogKey('claude', picked)).toBe('claude|p1|1')
+    // An edit to the provider moves the catalog with it.
+    expect(catalogKey('claude', { ...picked, revision: 2 })).toBe('claude|p1|2')
   })
 })

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
-import { Check, ClipboardList, ListTodo, MessageSquare, Play, Search, X, type LucideIcon } from 'lucide-react-native'
-import { checkCancel, checkMove, type ChatPermissionMode, type StartBlocker, type TaskStatus } from '@antumi/protocol'
+import { Check, ClipboardList, Cloud, ListTodo, MessageSquare, Play, Search, X, type LucideIcon } from 'lucide-react-native'
+import { checkCancel, checkMove, servingProviders, type ChatPermissionMode, type StartBlocker, type TaskStatus } from '@antumi/protocol'
 import { Markdown } from '../components/markdown'
-import { Button, Card, EmptyState, Muted, Screen, StatusPill, confirmTap } from '../components/ui'
+import { ChoiceList, Sheet } from '../components/sheet'
+import { Button, Card, EmptyState, ListGroup, ListRow, Muted, Screen, StatusPill, confirmTap } from '../components/ui'
 import { strings, t } from '../i18n'
-import { taskWhere } from '../labels'
+import { agentName, taskWhere } from '../labels'
 import { pop, push } from '../navigation'
 import { cancelTask, finishTask, startTask, useSession } from '../session'
 import { startBlockerOf, startModeOf } from '../task-start'
@@ -34,7 +35,11 @@ export function TaskScreen({ id }: { id: string }) {
   const task = useSession((s) => s.tasks[id])
   const tasks = useSession((s) => s.tasks)
   const operates = useSession((s) => s.status === 'online' && s.welcome?.access === 'operate')
+  const providers = useSession((s) => s.providers)
   const [busy, setBusy] = useState<'start' | 'done' | 'cancel' | null>(null)
+  const [providing, setProviding] = useState(false)
+  // Chosen here and kept for the task's conversation; a computer-set one is what it starts with.
+  const [provider, setProvider] = useState<string | null>(null)
   if (!task) {
     return <Screen title={t('task')} onBack={() => pop()}><EmptyState icon={ListTodo} title={t('taskGone')} /></Screen>
   }
@@ -42,6 +47,9 @@ export function TaskScreen({ id }: { id: string }) {
   const start = startAction(startModeOf(task, tasks))
   const closes = checkMove(task, 'done') === null
   const cancels = checkCancel(task) === null
+  const offered = task.agent ? servingProviders(providers ?? [], task.agent) : []
+  const startsOn = provider ?? task.launch.modelProvider ?? null
+  const chosen = offered.find((each) => each.id === startsOn) ?? null
   const act = async (kind: 'start' | 'done' | 'cancel', run: () => Promise<unknown>) => {
     confirmTap()
     setBusy(kind)
@@ -49,7 +57,7 @@ export function TaskScreen({ id }: { id: string }) {
     setBusy(null)
   }
   const begin = () => act('start', async () => {
-    const started = await startTask(task, startModeOf(task, tasks))
+    const started = await startTask(task, startModeOf(task, tasks), chosen?.id ?? null)
     // As on the computer, a start opens the task's chat, where its plan comes for approval.
     if (started?.conversationId) push({ name: 'chat', id: started.conversationId })
   })
@@ -69,6 +77,13 @@ export function TaskScreen({ id }: { id: string }) {
         </View>
       </View>
       {task.details.trim() ? <Card style={styles.details}><Markdown text={task.details} /></Card> : null}
+      {operates && blocker === null && offered.length > 0 ? (
+        <ListGroup>
+          <ListRow leading={<Cloud size={20} color={theme.textMuted} strokeWidth={1.8} />} title={t('provider')}
+            subtitle={chosen?.name ?? t('providerOwnAccount')}
+            onPress={() => setProviding(true)} />
+        </ListGroup>
+      ) : null}
       <View style={styles.actions}>
         {operates && blocker === null ? <Button label={start.label} kind="primary" icon={start.icon} wide busy={busy === 'start'} onPress={() => void begin()} /> : null}
         {operates && task.status === 'pending' && blockerText(blocker) ? <Muted>{blockerText(blocker)}</Muted> : null}
@@ -79,6 +94,18 @@ export function TaskScreen({ id }: { id: string }) {
         ) : null}
         {operates && cancels ? <Button label={t('cancelTask')} kind="danger" icon={X} wide busy={busy === 'cancel'} onPress={askCancel} /> : null}
       </View>
+      {providing && task.agent ? (
+        <Sheet title={t('provider')} onClose={() => setProviding(false)}>
+          <Muted>{t('providerHint', { name: agentName(task.agent) })}</Muted>
+          <ChoiceList
+            choices={[
+              { value: '', label: t('providerOwnAccount'), detail: t('providerOwnAccountDetail', { name: agentName(task.agent) }) },
+              ...offered.map((each) => ({ value: each.id, label: each.name, detail: each.defaultModel }))
+            ]}
+            current={startsOn ?? ''}
+            onPick={(next) => { setProvider(next || null); setProviding(false) }} />
+        </Sheet>
+      ) : null}
     </Screen>
   )
 }
