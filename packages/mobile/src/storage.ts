@@ -3,6 +3,7 @@ import { File, Paths } from 'expo-file-system'
 import { base64Url, MobileAccess, type ChatItem, type Conversation } from '@antumi/protocol'
 import { generateKeyPair, keyPairFromPrivate, type NoiseKeyPair } from '@antumi/protocol/mobile'
 import { z } from 'zod'
+import { CONVERSATION_GROUPINGS } from './conversation-groups'
 
 // What the phone keeps. Its key and the computers it paired with go in the Keystore / Keychain,
 // this device only, never into a backup: a new phone pairs again. Conversations seen lately are
@@ -25,7 +26,7 @@ export const Computer = z.object({
 })
 export type Computer = z.infer<typeof Computer>
 
-const Settings = z.object({ lock: z.boolean().catch(false) })
+const Settings = z.object({ lock: z.boolean().catch(false), conversationGroup: z.enum(CONVERSATION_GROUPINGS).catch('recent') })
 export type Settings = z.infer<typeof Settings>
 
 // When the app last asked GitHub for a newer version, what it found, and the one the user waved away.
@@ -77,7 +78,7 @@ export async function loadSettings(): Promise<Settings> {
   try {
     return Settings.parse(saved ? JSON.parse(saved) : {})
   } catch {
-    return { lock: false }
+    return { lock: false, conversationGroup: 'recent' }
   }
 }
 

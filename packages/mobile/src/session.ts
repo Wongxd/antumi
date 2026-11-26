@@ -28,6 +28,7 @@ import {
   type Task
 } from '@antumi/protocol'
 import { connectMobile, MobileConnectError, type MobileConnection, type MobileWelcome, type NoiseKeyPair } from '@antumi/protocol/mobile'
+import type { ConversationGrouping } from './conversation-groups'
 import { t } from './i18n'
 import { requestFailure as failure } from './request-failure'
 import { dropCache, loadComputers, loadSettings, phoneKey, readCache, saveComputers, saveSettings, writeCache, type Computer, type Settings } from './storage'
@@ -57,6 +58,8 @@ type State = {
   usage: AgentUsage[] | null
   // What the user wrote in a chat and has not sent, by conversation, while the app runs.
   drafts: Record<string, Draft>
+  // The conversation groups the user opened, by group key, while the app runs; the rest stay folded.
+  expandedGroups: Record<string, true>
   // A short message for the user, shown once.
   notice: string | null
 }
@@ -64,7 +67,7 @@ type State = {
 export const useSession = create<State>()(() => ({
   ready: false,
   locked: false,
-  settings: { lock: false },
+  settings: { lock: false, conversationGroup: 'recent' },
   computers: [],
   current: null,
   status: 'idle',
@@ -74,6 +77,7 @@ export const useSession = create<State>()(() => ({
   chats: {},
   usage: null,
   drafts: {},
+  expandedGroups: {},
   notice: null
 }))
 
@@ -156,6 +160,20 @@ export async function setLock(lock: boolean): Promise<void> {
   const settings = { ...useSession.getState().settings, lock }
   useSession.setState({ settings })
   await saveSettings(settings)
+}
+
+export async function setConversationGroup(conversationGroup: ConversationGrouping): Promise<void> {
+  const settings = { ...useSession.getState().settings, conversationGroup }
+  useSession.setState({ settings })
+  await saveSettings(settings)
+}
+
+// Which project groups are open, while the app runs; a restart folds them all again.
+export function toggleGroupExpanded(key: string): void {
+  const next = { ...useSession.getState().expandedGroups }
+  if (next[key]) delete next[key]
+  else next[key] = true
+  useSession.setState({ expandedGroups: next })
 }
 
 function clearRetry(): void {

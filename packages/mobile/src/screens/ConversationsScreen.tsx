@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { ListTodo, MessageSquare, Plus, Settings } from 'lucide-react-native'
+import { Clock, Folder, ListTodo, MessageSquare, Plus, Settings } from 'lucide-react-native'
 import { conversationAsking, conversationCrashed, conversationWaiting, conversationWorking, isHelper, type Conversation } from '@antumi/protocol'
 import { QuotaStrip } from '../components/quota'
 import { UpdateBanner } from '../components/update-banner'
-import { AgentAvatar, Button, EmptyState, FloatingButton, IconButton, ListGroup, ListRow, SectionLabel, Screen, StatusPill, confirmTap, tap } from '../components/ui'
+import { arrangeRecent } from '../conversation-groups'
+import { AgentAvatar, Button, Chip, EmptyState, FloatingButton, IconButton, ListGroup, ListRow, SectionLabel, Screen, StatusPill, confirmTap, tap } from '../components/ui'
 import { ago, t } from '../i18n'
-import { folderName, isCommandRequest, relativePath, where } from '../labels'
+import { agentName, folderName, isCommandRequest, relativePath, where } from '../labels'
 import { pop, push } from '../navigation'
-import { canOperate, computerOf, refresh, respond, useSession } from '../session'
+import { canOperate, computerOf, refresh, respond, setConversationGroup, toggleGroupExpanded, useSession } from '../session'
 import { mono, radius, space, type, useTheme } from '../theme'
 
 // Recent conversations shown at a time; scrolling to the bottom shows as many more.
@@ -61,6 +62,9 @@ export function ConversationsScreen() {
   const status = useSession((s) => s.status)
   const access = useSession((s) => s.welcome?.access)
   const online = status === 'online'
+  const groupBy = useSession((s) => s.settings.conversationGroup)
+  const openGroups = useSession((s) => s.expandedGroups)
+  const noProject = t('noProject')
   const [recentShown, setRecentShown] = useState(RECENT)
   const groups = useMemo(() => {
     // A delegated member is reached from its caller's chat, but listed while it waits on the user.
@@ -72,7 +76,8 @@ export function ConversationsScreen() {
     const recent = shown.filter((conversation) => !waiting.includes(conversation) && !running.includes(conversation))
     return { waiting, running, recent }
   }, [conversations])
-  const more = groups.recent.length > recentShown
+  const arranged = useMemo(() => arrangeRecent(groups.recent, groupBy, recentShown, noProject, openGroups), [groups.recent, groupBy, recentShown, noProject, openGroups])
+  const more = arranged.more
   const open = (conversation: Conversation) => push({ name: 'chat', id: conversation.id })
   const pill = online ? <StatusPill label={t('online')} tone="success" /> : status === 'connecting' ? <StatusPill label={t('connecting')} tone="running" /> : <StatusPill label={t('offline')} tone="neutral" />
   return (
@@ -105,14 +110,22 @@ export function ConversationsScreen() {
         </ListGroup>
       ) : null}
       {groups.recent.length > 0 ? (
-        <ListGroup title={t('recent')}>
-          {groups.recent.slice(0, recentShown).map((conversation) => (
+        <View style={styles.groupToggle}>
+          <Chip icon={Clock} label={t('recent')} active={groupBy === 'recent'} shrink={false} onPress={() => void setConversationGroup('recent')} />
+          <Chip icon={Folder} label={t('project')} active={groupBy === 'project'} shrink={false} onPress={() => void setConversationGroup('project')} />
+        </View>
+      ) : null}
+      {arranged.groups.map((group) => (
+        <ListGroup key={group.key} title={group.label ?? t('recent')} count={group.total}
+          expanded={groupBy === 'project' ? openGroups[group.key] === true : undefined}
+          onToggle={groupBy === 'project' ? () => toggleGroupExpanded(group.key) : undefined}>
+          {group.items.map((conversation) => (
             <ListRow key={conversation.id} leading={<AgentAvatar agent={conversation.agent} status={conversationCrashed(conversation) ? 'failed' : null} />} title={conversation.title || t('untitled')}
-              subtitle={where(conversation)} chevron={false} onPress={() => open(conversation)}
+              subtitle={group.label === null ? where(conversation) : agentName(conversation.agent)} chevron={false} onPress={() => open(conversation)}
               trailing={<Text style={[type.caption, { color: theme.text3 }]}>{ago(conversation.updatedAt)}</Text>} />
           ))}
         </ListGroup>
-      ) : null}
+      ))}
       {Object.keys(conversations).length === 0 && online ? (
         <EmptyState icon={MessageSquare} title={t('noConversations')} body={access === 'operate' ? t('noConversationsHint') : undefined} />
       ) : null}
@@ -124,6 +137,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   pill: { paddingTop: space.xs },
   section: { gap: space.sm },
+  groupToggle: { flexDirection: 'row', gap: space.sm },
   waiting: { borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: space.lg, gap: space.md },
   waitingHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   ask: { borderRadius: radius.md, padding: space.md, gap: 2 },

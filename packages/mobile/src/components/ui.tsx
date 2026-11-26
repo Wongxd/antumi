@@ -199,21 +199,38 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
   return <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }, style]}>{children}</View>
 }
 
-// Rows in one rounded card, divided by hairlines that start where the text does.
-export function ListGroup({ children, title }: { children: ReactNode; title?: string }) {
+// Rows in one rounded card, divided by hairlines that start where the text does. With `onToggle`
+// it is a folding section instead: the heading opens and closes the card, and says which with a
+// chevron; whether it is open lives with the caller.
+export function ListGroup({ children, title, count, expanded, onToggle }: { children: ReactNode; title?: string; count?: number; expanded?: boolean; onToggle?: () => void }) {
   const theme = useTheme()
   const rows = (Array.isArray(children) ? children : [children]).flat().filter(Boolean)
+  const heading = !title ? null : onToggle ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded: expanded === true }}
+      onPress={() => {
+        tap()
+        onToggle()
+      }}
+      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+    >
+      <SectionLabel title={title} count={count} right={expanded === true ? <ChevronDown size={16} color={theme.text3} /> : <ChevronRight size={16} color={theme.text3} />} />
+    </Pressable>
+  ) : <SectionLabel title={title} count={count} />
   return (
     <View style={styles.group}>
-      {title ? <SectionLabel title={title} /> : null}
-      <View style={[styles.groupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {rows.map((row, index) => (
-          <View key={index}>
-            {index > 0 ? <View style={[styles.divider, { backgroundColor: theme.border }]} /> : null}
-            {row}
-          </View>
-        ))}
-      </View>
+      {heading}
+      {onToggle && expanded !== true ? null : (
+        <View style={[styles.groupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          {rows.map((row, index) => (
+            <View key={index}>
+              {index > 0 ? <View style={[styles.divider, { backgroundColor: theme.border }]} /> : null}
+              {row}
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   )
 }
